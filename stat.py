@@ -1,4 +1,5 @@
 import datetime
+import math
 from collections import Counter
 
 
@@ -61,6 +62,8 @@ class Constants:
     not_out = [Ace, ServeWinner, In, Let, Winner, NetCord, PassingShot, PutAway]
     point_won = [Ace, ServeWinner, In, Winner, NetCord, PassingShot, PutAway, ForcingError, ForcingVolleyError]
 
+    Approach = ['Left Service Box', 'Right Service Box']
+
     fifteen = '15'
     thirty = '30'
     forty = '40'
@@ -79,20 +82,84 @@ class Comment:
       return repr((self.player, self.comment))
 
 
+class Coordinate:
+
+   def __init__(self, x, y, kind):
+      self.x = float(x)
+      self.y = float(y)
+      self.kind = kind
+      if self.y < 160:
+         self.court = 'Far / Left'
+      elif self.y > 160:
+         self.court = 'Near / Right'
+      else:
+         self.court = 'Net'
+
+      self.status = 'Out'
+      if self.x >= 18 and self.x <= 230 and self.y >= 18 and self.y <= 300:
+         self.status = 'In Doubles'
+      if self.x >= 38 and self. x <= 202 and self.y >= 18 and self.y <= 300:
+         self.status = 'In Singles'
+
+      self.location = 'Out'
+      if ((self.x >= 38 and self.x <= 122 and self.y > 91 and self.y <= 160)
+         or (self.x >= 122 and self.x <= 202 and self.y >= 160 and self.y < 229)):
+             self.location = 'Right Service Box'
+      if ((self.x >= 38 and self.x <= 122 and self.y >= 160 and self.y < 229)
+         or (self.x >= 122 and self.x <= 202 and self.y > 91 and self.y <= 160)):
+             self.location = 'Left Service Box'
+      if ((self.x >= 38 and self.x <= 202 and self.y >= 18 and self.y < 38)
+         or (self.x >= 38 and self.x <= 202 and self.y > 280 and self.y <= 300)):
+             self.location = 'Baseline'
+      if ((self.x >= 38 and self.x <= 202 and self.y >= 38 and self.y <= 68)
+         or (self.x >= 38 and self.x <= 202 and self.y > 250 and self.y <= 280)):
+             self.location = "No Man's"
+      if ((self.x >= 38 and self.x <= 202 and self.y > 68 and self.y <= 90)
+         or (self.x >= 38 and self.x <= 202 and self.y >= 230 and self.y <= 250)):
+             self.location = 'Service Line'
+      if ((self.x >= 18 and self.x < 38 and self.y >= 18 and self.y <= 300)
+         or (self.x > 202 and self.x <= 230 and self.y >= 18 and self.y <= 300)):
+             self.location = 'Doubles Alley'
+      if self.y == 160:
+          self.location = 'Net'
+
+   def __repr__(self):
+      return repr((self.court, self.location))
+
+
+class Path:
+
+   def __init__(self, impact, mark):
+       self.impact = impact
+       self.mark = mark
+       if ((self.impact.x <= 122 and self.mark.x > 122)
+          or (self.impact.x > 122 and self.mark.x <= 122)):
+           if self.mark.y > 90 and self.mark.y < 230:
+               self.trajectory = 'Short Angle'
+           else:
+               self.trajectory = 'Crosscourt'
+       elif self.mark.x > 80 and self.mark.x < 160:
+           self.trajectory = 'Middle'
+       else:
+           self.trajectory = 'Line'
+
+   def __repr__(self):
+      return repr((self.impact, self.mark, self.trajectory))
+
+
 class Shot:
 
    def __init__(self, players, player, stroke, stroke_type, stroke_x, stroke_y, result, result_x, result_y, r_misc, s_time):
       self.player = players[Constants.competitors.index(player)]
       self.stroke = stroke
       self.stroke_type = stroke_type
-      self.stroke_location = [stroke_x, stroke_y]
-      self.stroke_result = [result_x, result_y]
+      self.stroke_path = Path(Coordinate(stroke_x, stroke_y, 'impact'), Coordinate(result_x, result_y, 'mark'))
       self.result = result
       self.r_misc = r_misc
       self.s_time = s_time
 
    def __repr__(self):
-      return repr((self.player, self.stroke, self.stroke_type, self.result, self.stroke_location, self.stroke_result))
+      return repr((self.player, self.stroke, self.stroke_type, self.result, self.stroke_path))
 
 
 class Serve:
@@ -216,16 +283,21 @@ class Stats:
         self.service_points = [point for game in self.service_games for point in game.points]
         self.receiving_points = [point for game in self.receiving_games for point in game.points]
 
+        self.all_shots = [shot for point in self.all_points for shot in point.shots if shot.player == self.name]
+        self.approach_shots = [shot for shot in self.all_shots if shot.stroke_path.impact.location in Constants.Approach]
+        self.approach_shots_won = [shot for shot in self.approach_shots if shot.result in Constants.point_won]
+        self.approach_shots_pct = math.ceil(len(self.approach_shots_won) * 100 / len(self.approach_shots))
+
         self.points_won = [point for game in self.games for point in game.points if self.name == point.winner]
         self.points_won_serving = [point for game in self.service_games for point in game.points if self.name == point.winner]
         self.points_won_receiving = [point for game in self.receiving_games for point in game.points if self.name == point.winner]
 
-        self.avg_rally_length = round(sum([int(point.rally_length) for point in self.all_points]) / len(self.all_points))
-        self.avg_rally_length_serving = round(sum([int(point.rally_length) for point in self.service_points]) / len(self.service_points))
-        self.avg_rally_length_receiving = round(sum([int(point.rally_length) for point in self.receiving_points]) / len(self.receiving_points))
-        self.avg_rally_length_points_won = round(sum([int(point.rally_length) for point in self.points_won]) / len(self.points_won))
-        self.avg_rally_length_points_won_serving = round(sum([int(point.rally_length) for point in self.points_won_serving]) / len(self.points_won_serving))
-        self.avg_rally_length_points_won_receiving = round(sum([int(point.rally_length) for point in self.points_won_receiving]) / len(self.points_won_receiving))
+        self.avg_rally_length = math.ceil(sum([int(point.rally_length) for point in self.all_points]) / len(self.all_points))
+        self.avg_rally_length_serving = math.ceil(sum([int(point.rally_length) for point in self.service_points]) / len(self.service_points))
+        self.avg_rally_length_receiving = math.ceil(sum([int(point.rally_length) for point in self.receiving_points]) / len(self.receiving_points))
+        self.avg_rally_length_points_won = math.ceil(sum([int(point.rally_length) for point in self.points_won]) / len(self.points_won))
+        self.avg_rally_length_points_won_serving = math.ceil(sum([int(point.rally_length) for point in self.points_won_serving]) / len(self.points_won_serving))
+        self.avg_rally_length_points_won_receiving = math.ceil(sum([int(point.rally_length) for point in self.points_won_receiving]) / len(self.points_won_receiving))
 
         self.breaks = [game for game in self.games if game.server != self.name and game.winner == self.name]
         self.breakpoints = [point for point in self.all_points if point.server == self.opponent
@@ -359,6 +431,8 @@ class PTN:
                "(", player_stats.match_stats.points_pct_receiving, ")")
         print ("Break Points Converted   :", len(player_stats.match_stats.breaks), "of", len(player_stats.match_stats.breakpoints),
                "(", player_stats.match_stats.breakpoints_pct, ")")
+        print ("Successful Net Approaches:", len(player_stats.match_stats.approach_shots_won), "of", len(player_stats.match_stats.approach_shots),
+               "(", player_stats.match_stats.approach_shots_pct, ")")
         print ("Returns in Play          :", player_stats.match_stats.returns_in_play_pct,
                "(", player_stats.match_stats.returns_1st_pct, "/", player_stats.match_stats.returns_2nd_pct, ")")
         print ("Aggressive Margin        :", player_stats.match_stats.aggressive_margin, "(", player_stats.match_stats.aggressive_margin_pct, ")")
