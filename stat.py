@@ -45,13 +45,13 @@ class Serve:
 
 class Point:
    competitors = ['T', 'O']
-   score = {}
 
    def __init__(self, players, winner, T_score, O_score, p_time, rally_length, shots):
       self.players = players
       self.winner = self.players[self.competitors.index(winner)]
-      self.score[players[0]] = T_score
-      self.score[players[1]] = O_score
+      self.T_score = T_score
+      self.O_score = O_score
+      self.score = {players[0]: T_score, players[1]: O_score}
       self.p_time = p_time
       self.rally_length = rally_length
       self.shots = shots
@@ -64,7 +64,7 @@ class Point:
       self.key_shot = self.shots[-1]
 
    def __repr__(self):
-      return repr((self.winner, self.score, self.rally_length, self.p_time, self.shots))
+      return repr((self.winner, self.T_score, self.O_score, self.rally_length, self.p_time, self.shots))
 
 
 class Game:
@@ -75,8 +75,7 @@ class Game:
       self.server = points[0].server
       self.receiver = points[0].receiver
       self.winner = players[self.competitors.index(winner)]
-      self.player_1_score = player_1_score
-      self.player_2_score = player_2_score
+      self.score = {players[0]: player_1_score, players[1]: player_2_score}
       self.points = points
       self.g_time = g_time
       self.breakpoints = [point for point in points
@@ -92,7 +91,7 @@ class Game:
                                 float(len(self.second_serves) - len(self.second_serves_out)) / len(self.second_serves))
 
    def __repr__(self):
-      return repr((self.winner, self.players[0], self.player_1_score, self.players[1], self.player_2_score))
+      return repr((self.winner, self.score))
 
 
 class Set:
@@ -100,8 +99,6 @@ class Set:
 
    def __init__(self, players, winner, player_1, player_2, games):
       self.winner = players[self.competitors.index(winner)]
-      self.player_1 = player_1
-      self.player_2 = player_2
       self.games = games
       self.breaks = [game for game in games if game.server != game.winner]
       self.breakpoints = [breakpoint for game in self.games for breakpoint in game.breakpoints]
@@ -151,8 +148,7 @@ class PlayerStats:
         self.all_points = [point for game in self.games for point in game.points]
         self.points_won = [point for game in self.games for point in game.points if self.name == point.winner]
         self.breaks = [game for game in self.games if game.server != self.name and game.winner == self.name]
-        self.breakpoints = [point for point in self.all_points if point.score[name] == 'A' or (point.score[name] == '40' and True)]
-        self.breakpoint_pct = (None if not len(self.breakpoints) else float(len(self.breaks)) * 100 / len(self.breakpoints))
+        self.breakpoints = [game.breakpoints for game in self.games if game not in self.service_games]
 
         # self.first_serves = [shot for point in game.points for game in self.service_games for shot in point.shots if shot.stroke_type == 'First Serve']
         # self.first_serves_out = [serve for serve in self.first_serves if serve.result not in ['Ace', 'Serve Winner', 'In']]
@@ -217,4 +213,4 @@ def pf(filename):
 
 
 def refresh():
-   print ('exec(open("stat.py").read())')
+   eval('exec(open("stat.py").read())')
