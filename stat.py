@@ -61,6 +61,8 @@ class Constants:
     errors = [Out, Netted, OutOffNet, OutPassingShot, NettedPassingShot]
     not_out = [Ace, ServeWinner, In, Let, Winner, NetCord, PassingShot, PutAway]
     point_won = [Ace, ServeWinner, In, Winner, NetCord, PassingShot, PutAway, ForcingError, ForcingVolleyError]
+    winner = [Winner, PassingShot, PutAway]
+    forcing_error = [ForcingError, ForcingVolleyError]
 
     Approach = ['Left Service Box', 'Right Service Box']
 
@@ -70,6 +72,17 @@ class Constants:
     deuce = 'D'
     game = 'G'
     advantage = 'A'
+
+    net_y = 160
+    doubles_wide_x = [17, 231]
+    singles_wide_x = [37, 203]
+    svc_left_x = [37, 124]
+    svc_right_x = [119, 203]
+    out_long_y = [17, 301]
+    baseline_y = [37, 281]
+    no_mans_y = [67, 251]
+    service_line_y = [91, 229]
+    box_divider_x = [124, 119]
 
 
 class Comment:
@@ -85,43 +98,44 @@ class Comment:
 class Coordinate:
 
    def __init__(self, x, y, kind):
+      [self.kind, self.net, self.court_far, self.court_near, self.in_doubles, self.in_singles] = [None, None, None, None, None, None]
+      [self.right_service_box, self.left_service_box, self.volley_zone, self.service_line] = [None, None, None, None]
+      [self.no_mans_land, self.baseline, self.court, self.location, self.x, self.y] = [None, None, None, None, None, None]
+
+      if not (x or y):
+          return
+
       self.x = float(x)
       self.y = float(y)
       self.kind = kind
-      if self.y < 160:
-         self.court = 'Far / Left'
-      elif self.y > 160:
-         self.court = 'Near / Right'
-      else:
-         self.court = 'Net'
 
-      self.status = 'Out'
-      if self.x >= 18 and self.x <= 230 and self.y >= 18 and self.y <= 300:
-         self.status = 'In Doubles'
-      if self.x >= 38 and self. x <= 202 and self.y >= 18 and self.y <= 300:
-         self.status = 'In Singles'
+      self.net = (self.y == Constants.net_y)
+      self.court_far = (self.y < Constants.net_y)
+      self.court_near = (self.y > Constants.net_y)
+      self.in_doubles = (self.between(Constants.doubles_wide_x, self.x) and self.between(Constants.out_long_y, self.y) and not (self.y == Constants.net_y))
+      self.in_singles = (self.between(Constants.singles_wide_x, self.x) and self.between(Constants.out_long_y, self.y) and not (self.y == Constants.net_y))
+      self.right_service_box = (self.between(Constants.service_line_y, self.y) and
+                                ((self.between(Constants.svc_left_x, self.x) and self.court_far)
+                                or (self.between(Constants.svc_right_x, self.x) and self.court_near)))
+      self.left_service_box = (self.between(Constants.service_line_y, self.y) and
+                               ((self.between(Constants.svc_right_x, self.x) and self.court_far)
+                               or (self.between(Constants.svc_left_x, self.x) and self.court_near)))
+      self.volley_zone = (self.left_service_box or self.right_service_box)
+      self.service_line = (self.between(Constants.no_mans_y, self.y) and not self.volley_zone)
+      self.no_mans_land = (self.between(Constants.baseline_y, self.y) and not (self.volley_zone or self.service_line))
+      self.baseline = (self.between(Constants.out_long_y, self.y) and not (self.volley_zone or self.service_line or self.no_mans_land))
 
-      self.location = 'Out'
-      if ((self.x >= 38 and self.x <= 122 and self.y > 91 and self.y <= 160)
-         or (self.x >= 122 and self.x <= 202 and self.y >= 160 and self.y < 229)):
-             self.location = 'Right Service Box'
-      if ((self.x >= 38 and self.x <= 122 and self.y >= 160 and self.y < 229)
-         or (self.x >= 122 and self.x <= 202 and self.y > 91 and self.y <= 160)):
-             self.location = 'Left Service Box'
-      if ((self.x >= 38 and self.x <= 202 and self.y >= 18 and self.y < 38)
-         or (self.x >= 38 and self.x <= 202 and self.y > 280 and self.y <= 300)):
-             self.location = 'Baseline'
-      if ((self.x >= 38 and self.x <= 202 and self.y >= 38 and self.y <= 68)
-         or (self.x >= 38 and self.x <= 202 and self.y > 250 and self.y <= 280)):
-             self.location = "No Man's"
-      if ((self.x >= 38 and self.x <= 202 and self.y > 68 and self.y <= 90)
-         or (self.x >= 38 and self.x <= 202 and self.y >= 230 and self.y <= 250)):
-             self.location = 'Service Line'
-      if ((self.x >= 18 and self.x < 38 and self.y >= 18 and self.y <= 300)
-         or (self.x > 202 and self.x <= 230 and self.y >= 18 and self.y <= 300)):
-             self.location = 'Doubles Alley'
-      if self.y == 160:
-          self.location = 'Net'
+      self.court = ('Far' if self.court_far else ('Near' if self.court_near else 'Net'))
+      self.location = ('Doubles Alley' if (self.in_doubles and not self.in_singles) else
+                       ('Left Service Box' if self.left_service_box else
+                        ('Right Service Box' if self.right_service_box else
+                         ('Service Line' if self.service_line else
+                          ("No Man's" if self.no_mans_land else
+                           ('Baseline' if self.baseline else
+                            ('Net' if self.net else 'Out')))))))
+
+   def between(self, coordinate_pair, z):
+       return (True if z > coordinate_pair[0] and z < coordinate_pair[1] else False)
 
    def __repr__(self):
       return repr((self.court, self.location))
@@ -130,8 +144,13 @@ class Coordinate:
 class Path:
 
    def __init__(self, impact, mark):
+       [self.trajectory] = [None]
+
        self.impact = impact
        self.mark = mark
+       if not (self.impact.x or self.impact.y or mark.x or mark.y):
+           return
+
        if ((self.impact.x <= 122 and self.mark.x > 122)
           or (self.impact.x > 122 and self.mark.x <= 122)):
            if self.mark.y > 90 and self.mark.y < 230:
@@ -153,13 +172,13 @@ class Shot:
       self.player = players[Constants.competitors.index(player)]
       self.stroke = stroke
       self.stroke_type = stroke_type
-      self.stroke_path = Path(Coordinate(stroke_x, stroke_y, 'impact'), Coordinate(result_x, result_y, 'mark'))
+      self.path = Path(Coordinate(stroke_x, stroke_y, 'impact'), Coordinate(result_x, result_y, 'mark'))
       self.result = result
       self.r_misc = r_misc
       self.s_time = s_time
 
    def __repr__(self):
-      return repr((self.player, self.stroke, self.stroke_type, self.result, self.stroke_path))
+      return repr((self.player, self.stroke, self.stroke_type, self.result, self.path))
 
 
 class Serve:
@@ -284,9 +303,9 @@ class Stats:
         self.receiving_points = [point for game in self.receiving_games for point in game.points]
 
         self.all_shots = [shot for point in self.all_points for shot in point.shots if shot.player == self.name]
-        self.approach_shots = [shot for shot in self.all_shots if shot.stroke_path.impact.location in Constants.Approach]
+        self.approach_shots = [shot for shot in self.all_shots if shot.path.impact.location in Constants.Approach]
         self.approach_shots_won = [shot for shot in self.approach_shots if shot.result in Constants.point_won]
-        self.approach_shots_pct = math.ceil(len(self.approach_shots_won) * 100 / len(self.approach_shots))
+        self.approach_shots_pct = (None if not len(self.approach_shots) else math.ceil(len(self.approach_shots_won) * 100 / len(self.approach_shots)))
 
         self.points_won = [point for game in self.games for point in game.points if self.name == point.winner]
         self.points_won_serving = [point for game in self.service_games for point in game.points if self.name == point.winner]
@@ -303,7 +322,7 @@ class Stats:
         self.breakpoints = [point for point in self.all_points if point.server == self.opponent
                             and (point.score[self.name] == Constants.advantage
                                  or (point.score[self.name] == Constants.forty and point.score[self.opponent] != Constants.forty))]
-        self.breakpoints_pct = round(len(self.breaks) * 100 / len(self.breakpoints))
+        self.breakpoints_pct = (None if not len(self.breakpoints) else round(len(self.breaks) * 100 / len(self.breakpoints)))
 
         self.first_serves = [shot for game in self.service_games for point in game.points for shot in point.shots if shot.stroke_type == Constants.first_serve]
         self.first_serves_in = [serve for serve in self.first_serves if serve.result in Constants.not_out and serve.result != Constants.Let]
@@ -328,8 +347,8 @@ class Stats:
                                 if self.name != point.winner
                                 and point.shots[-1].stroke != Constants.Serve
                                 and point.shots[-1].player == self.name]
-        self.winners = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result == Constants.Winner]
-        self.forcing_errors = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result == Constants.ForcingError]
+        self.winners = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result in Constants.winner]
+        self.forcing_errors = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result in Constants.forcing_error]
 
         self.points_pct = round(len(self.points_won) * 100 / len(self.all_points))
         self.points_won_1st_serve = [point for point in self.points_won if point.server == self.name and Constants.second_serve not in point.stroke_types]
@@ -356,83 +375,107 @@ class Stats:
         return repr((self.first_serves_pct, self.second_serves_pct))
 
 
-class PTN:
+class FormatStats:
 
-    def parse(filename):
-       [winner] = ['']
-       try:
-          with open(filename, 'r', encoding='utf16') as csvfile:
-             lines = csvfile.readlines()
-       except:
-          with open(filename, 'r') as csvfile:
-             lines = csvfile.readlines()
+    def __init__(self, stats):
+        self.first_serve_pct = "{0:.0f}%".format(stats.first_serve_pct)
+        self.aces_service_winners = "{0:.0f} / {1:.0f}".format(len(stats.aces), len(stats.serve_winners))
+        self.double_faults = "{0:.0f}".format(len(stats.double_faults))
+        self.unforced_errors = "{0:.0f}".format(len(stats.unforced_errors))
+        self.winners_forcing_errors = "{0:.0f} / {1:.0f}".format(len(stats.winners), len(stats.forcing_errors))
+        self.points_won = "{0} ({1:.0f}%)".format(len(stats.points_won), stats.points_pct)
+        self.points_won_1st_serve = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_1st_serve), len(stats.first_serves_in), stats.points_pct_1st_serve)
+        self.points_won_2nd_serve = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_2nd_serve), len(stats.second_serves), stats.points_pct_2nd_serve)
+        self.points_won_receiving = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_receiving), len(stats.receiving_points), stats.points_pct_receiving)
+        self.break_points_converted = "{0} of {1} ({2:.0f}%)".format(len(stats.breaks), len(stats.breakpoints), stats.breakpoints_pct)
+        self.successful_net_approaches = "{0} of {1} ({2:.0f}%)".format(len(stats.approach_shots_won), len(stats.approach_shots), stats.approach_shots_pct)
+        self.returns_in_play = "{0:.0f}% ({1:.0f}% / {2:.0f}%)".format(stats.returns_in_play_pct, stats.returns_1st_pct, stats.returns_2nd_pct)
+        self.aggressive_margin = "{0:.0f} ({1:.0f}%)".format(stats.aggressive_margin, stats.aggressive_margin_pct)
 
-       [shots, points, games, sets, comments] = [[], [], [], [], []]
-       for l, line in enumerate(lines):
-          line = line.replace('"', '')
-          [r_misc, s_time] = ['', '']
-          data = line.strip().split(',')
-          if data[0] == Constants.MatchDetails:
-             players = data[1:3]
-             match_date = data[3]
-             in_out = data[6]
-          elif data[0] == Constants.Format:
-             number_of_sets = data[1]
-             match_games = data[2]
-             format_description = data[3]
-             advantage = data[4]
-             lets = data[5]
-          elif data[0] == Constants.StartTime:
-             start_time = data[1]
-             finish_time = data[1]
-          elif data[0] == Constants.Server:
-             first_server = data[1]
-          elif data[0] == Constants.PlayerEnds:
-             player_ends = data[1]
-          elif data[0] == Constants.Match:
-             winner = data[1]
-             finish_time = data[2]
-          elif data[0] == Constants.Shot:
-             if len(data) == 11:
-                r_misc = data[9]
-                s_time = data[10]
-             shots.append(Shot(players, *data[1:9], r_misc=r_misc, s_time=s_time))
-          elif data[0] == Constants.Point:
-             points.append(Point(players, *data[1:6], shots=shots))
-             shots = []
-          elif data[0] == Constants.Comment:
-             comments.append(Comment(data[1], data[2]))
-          elif data[0] == Constants.Game:
-             games.append(Game(players, *data[1:5], points=points))
-             [shots, points, comments] = [[], [], []]
-          elif data[0] == Constants.Set:
-             sets.append(Set(players, *data[1:4], games=games))
-             [shots, points, games, comments] = [[], [], [], []]
 
-       if sets == [] and games != []:
-           sets.append(Set(players, '', '', '', games=games))
+def parse(filename):
+   [winner] = ['']
+   try:
+      with open(filename, 'r', encoding='utf16') as csvfile:
+         lines = csvfile.readlines()
+   except:
+      with open(filename, 'r') as csvfile:
+         lines = csvfile.readlines()
 
-       return Match(players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
-                    start_time, finish_time, first_server, player_ends, winner, sets)
+   [shots, points, games, sets, comments] = [[], [], [], [], []]
+   for l, line in enumerate(lines):
+      line = line.replace('"', '')
+      [r_misc, s_time] = ['', '']
+      data = line.strip().split(',')
+      data += ['' for x in range(10)]
+      if data[0] == Constants.MatchDetails:
+         players = data[1:3]
+         match_date = data[3]
+         in_out = data[6]
+      elif data[0] == Constants.Format:
+         number_of_sets = data[1]
+         match_games = data[2]
+         format_description = data[3]
+         advantage = data[4]
+         lets = data[5]
+      elif data[0] == Constants.StartTime:
+         start_time = data[1]
+         finish_time = data[1]
+      elif data[0] == Constants.Server:
+         first_server = data[1]
+      elif data[0] == Constants.PlayerEnds:
+         player_ends = data[1]
+      elif data[0] == Constants.Match:
+         winner = data[1]
+         finish_time = data[2]
+      elif data[0] == Constants.Shot:
+         if len(data) == 11:
+            r_misc = data[9]
+            s_time = data[10]
+         shots.append(Shot(players, *data[1:9], r_misc=r_misc, s_time=s_time))
+      elif data[0] == Constants.Point:
+         points.append(Point(players, *data[1:6], shots=shots))
+         shots = []
+      elif data[0] == Constants.Comment:
+         comments.append(Comment(data[1], data[2]))
+      elif data[0] == Constants.Game:
+         games.append(Game(players, *data[1:5], points=points))
+         [shots, points, comments] = [[], [], []]
+      elif data[0] == Constants.Set:
+         sets.append(Set(players, *data[1:4], games=games))
+         [shots, points, games, comments] = [[], [], [], []]
 
-    def player_stats(player_stats):
-        print ("Name                     :", player_stats.name)
-        print ("First Serve %            :", player_stats.match_stats.first_serve_pct)
-        print ("Aces / Service Winners   :", len(player_stats.match_stats.aces), "/", len(player_stats.match_stats.serve_winners))
-        print ("Double Faults            :", len(player_stats.match_stats.double_faults))
-        print ("Unforced Errors          :", len(player_stats.match_stats.unforced_errors))
-        print ("Winners / Forcing Errors :", len(player_stats.match_stats.winners), "/", len(player_stats.match_stats.forcing_errors))
-        print ("Total Points Won         :", len(player_stats.match_stats.points_won), "(", player_stats.match_stats.points_pct, ")")
-        print ("First Serve Points Won   :", len(player_stats.match_stats.points_won_1st_serve), "of", len(player_stats.match_stats.first_serves_in),
-               "(", player_stats.match_stats.points_pct_1st_serve, ")")
-        print ("Second Serve Points Won  :", len(player_stats.match_stats.points_won_2nd_serve), "of", len(player_stats.match_stats.second_serves),
-               "(", player_stats.match_stats.points_pct_2nd_serve, ")")
-        print ("Receiving Points Won     :", len(player_stats.match_stats.points_won_receiving), "of", len(player_stats.match_stats.receiving_points),
-               "(", player_stats.match_stats.points_pct_receiving, ")")
-        print ("Break Points Converted   :", len(player_stats.match_stats.breaks), "of", len(player_stats.match_stats.breakpoints),
-               "(", player_stats.match_stats.breakpoints_pct, ")")
-        print ("Successful Net Approaches:", len(player_stats.match_stats.approach_shots_won), "of", len(player_stats.match_stats.approach_shots),
-               "(", player_stats.match_stats.approach_shots_pct, ")")
-        print ("Returns in Play          :", player_stats.match_stats.returns_in_play_pct,
-               "(", player_stats.match_stats.returns_1st_pct, "/", player_stats.match_stats.returns_2nd_pct, ")")
-        print ("Aggressive Margin        :", player_stats.match_stats.aggressive_margin, "(", player_stats.match_stats.aggressive_margin_pct, ")")
+   if sets == [] and games != []:
+       sets.append(Set(players, '', '', '', games=games))
+
+   return Match(players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
+                start_time, finish_time, first_server, player_ends, winner, sets)
+
+
+def match_stats(match):
+    player_one = match.players[0]
+    player_two = match.players[1]
+    player_one_stats = PlayerStats(player_one, match)
+    player_two_stats = PlayerStats(player_two, match)
+    p1fs = FormatStats(player_one_stats.match_stats)
+    p2fs = FormatStats(player_two_stats.match_stats)
+
+    width = 25
+    print (player_one.center(width), "--PLAYER--".center(width), player_two.center(width))
+    print (p1fs.first_serve_pct.center(width), "First Serve Percentage".center(width), p2fs.first_serve_pct.center(width))
+    print (p1fs.aces_service_winners.center(width), "Aces/Service Winners".center(width), p2fs.aces_service_winners.center(width))
+    print (p1fs.double_faults.center(width), "Double Faults".center(width), p2fs.double_faults.center(width))
+    print (p1fs.unforced_errors.center(width), "Unforced Errors".center(width), p2fs.unforced_errors.center(width))
+    print (p1fs.winners_forcing_errors.center(width), "Winners/Forcing Errors".center(width), p2fs.winners_forcing_errors.center(width))
+    print (p1fs.points_won.center(width), "Total Points Won".center(width), p2fs.points_won.center(width))
+    print (p1fs.points_won_1st_serve.center(width), "Points Won 1st Serve".center(width), p2fs.points_won_1st_serve.center(width))
+    print (p1fs.points_won_2nd_serve.center(width), "Points Won 2nd Serve".center(width), p2fs.points_won_2nd_serve.center(width))
+    print (p1fs.points_won_receiving.center(width), "Points Won Receiving".center(width), p2fs.points_won_receiving.center(width))
+    print (p1fs.break_points_converted.center(width), "Break Points Converted".center(width), p2fs.break_points_converted.center(width))
+    print (p1fs.successful_net_approaches.center(width), "Successful Net Approaches".center(width), p2fs.successful_net_approaches.center(width))
+    print (p1fs.returns_in_play.center(width), "% Returns in Play".center(width), p2fs.returns_in_play.center(width))
+    print (p1fs.aggressive_margin.center(width), "Aggressive Margin".center(width), p2fs.aggressive_margin.center(width))
+
+
+match = parse('abcd.ptf')
+match_stats(match)
