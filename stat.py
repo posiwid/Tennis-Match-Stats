@@ -7,7 +7,8 @@ class Constants:
     date_format = '%d-%b-%Y'
     time_format = '%H:%M:%S'
 
-    competitors = ['T', 'O']
+    singles_competitors = ['T', 'O']
+    doubles_competitors = ['T1', 'T2', 'O1', 'O2']
 
     MatchDetails = 'Match Details'
     Format = 'Format'
@@ -169,7 +170,8 @@ class Path:
 class Shot:
 
    def __init__(self, players, player, stroke, stroke_type, stroke_x, stroke_y, result, result_x, result_y, r_misc, s_time):
-      self.player = players[Constants.competitors.index(player)]
+      competitors = (Constants.singles_competitors if len(players) == 2 else Constants.doubles_competitors)
+      self.player = players[competitors.index(player)]
       self.stroke = stroke
       self.stroke_type = stroke_type
       self.path = Path(Coordinate(stroke_x, stroke_y, 'impact'), Coordinate(result_x, result_y, 'mark'))
@@ -197,7 +199,7 @@ class Point:
 
    def __init__(self, players, winner, T_score, O_score, p_time, rally_length, shots):
       self.players = players
-      player_index = Constants.competitors.index(winner)
+      player_index = Constants.singles_competitors.index(winner)
       self.winner = (None if player_index < 0 else players[player_index])
       self.score = {players[0]: T_score, players[1]: O_score}
       self.p_time = p_time
@@ -222,7 +224,7 @@ class Game:
       self.players = players
       self.server = points[0].server
       self.receiver = points[0].receiver
-      player_index = (None if winner not in Constants.competitors else Constants.competitors.index(winner))
+      player_index = (None if winner not in Constants.singles_competitors else Constants.singles_competitors.index(winner))
       self.winner = (None if player_index is None else players[player_index])
       self.score = {players[0]: player_1_score, players[1]: player_2_score}
       self.points = points
@@ -235,7 +237,7 @@ class Game:
 class Set:
 
    def __init__(self, players, winner, player_1, player_2, games):
-      player_index = (None if winner not in Constants.competitors else Constants.competitors.index(winner))
+      player_index = (None if winner not in Constants.singles_competitors else Constants.singles_competitors.index(winner))
       self.winner = (None if player_index is None else players[player_index])
       self.games = games
       self.breaks = [game for game in games if game.server != game.winner]
@@ -247,8 +249,9 @@ class Set:
 
 class Match:
 
-   def __init__(self, players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
+   def __init__(self, sides, players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
                 start_time, finish_time, first_server, player_ends, winner, sets):
+      self.sides = sides
       self.players = players
       self.match_date = match_date
       self.date_timestamp = datetime.datetime.strptime(match_date, Constants.date_format)
@@ -263,7 +266,7 @@ class Match:
       self.lets = lets
       self.first_server = first_server
       self.player_ends = player_ends
-      player_index = (None if winner not in Constants.competitors else Constants.competitors.index(winner))
+      player_index = (None if winner not in Constants.singles_competitors else Constants.singles_competitors.index(winner))
       self.winner = (None if player_index is None else players[player_index])
       self.sets = sets
       self.games = [game for m_set in self.sets for game in m_set.games]
@@ -294,9 +297,9 @@ class Stats:
         self.name = name
         self.games = games
         self.games_won = [game for game in self.games if self.name == game.winner]
-        self.service_games = [game for game in self.games if self.name == game.server]
+        self.service_games = [game for game in self.games if game.server in self.name]
         self.receiving_games = [game for game in self.games if game not in self.service_games]
-        self.opponent = self.service_games[0].receiver
+        self.opponent = (None if not len(self.service_games) else self.service_games[0].receiver)
 
         self.all_points = [point for game in self.games for point in game.points]
         self.service_points = [point for game in self.service_games for point in game.points]
@@ -311,12 +314,17 @@ class Stats:
         self.points_won_serving = [point for game in self.service_games for point in game.points if self.name == point.winner]
         self.points_won_receiving = [point for game in self.receiving_games for point in game.points if self.name == point.winner]
 
-        self.avg_rally_length = math.ceil(sum([int(point.rally_length) for point in self.all_points]) / len(self.all_points))
-        self.avg_rally_length_serving = math.ceil(sum([int(point.rally_length) for point in self.service_points]) / len(self.service_points))
-        self.avg_rally_length_receiving = math.ceil(sum([int(point.rally_length) for point in self.receiving_points]) / len(self.receiving_points))
-        self.avg_rally_length_points_won = math.ceil(sum([int(point.rally_length) for point in self.points_won]) / len(self.points_won))
-        self.avg_rally_length_points_won_serving = math.ceil(sum([int(point.rally_length) for point in self.points_won_serving]) / len(self.points_won_serving))
-        self.avg_rally_length_points_won_receiving = math.ceil(sum([int(point.rally_length) for point in self.points_won_receiving]) / len(self.points_won_receiving))
+        self.avg_rally_length = (None if not len(self.all_points) else math.ceil(sum([int(point.rally_length) for point in self.all_points]) / len(self.all_points)))
+        self.avg_rally_length_serving = (None if not len(self.service_points) else
+                                         math.ceil(sum([int(point.rally_length) for point in self.service_points]) / len(self.service_points)))
+        self.avg_rally_length_receiving = (None if not len(self.receiving_points) else
+                                           math.ceil(sum([int(point.rally_length) for point in self.receiving_points]) / len(self.receiving_points)))
+        self.avg_rally_length_points_won = (None if not len(self.points_won) else
+                                            math.ceil(sum([int(point.rally_length) for point in self.points_won]) / len(self.points_won)))
+        self.avg_rally_length_points_won_serving = (None if not len(self.points_won_serving) else
+                                                    math.ceil(sum([int(point.rally_length) for point in self.points_won_serving]) / len(self.points_won_serving)))
+        self.avg_rally_length_points_won_receiving = (None if not len(self.points_won_receiving) else
+                                                      math.ceil(sum([int(point.rally_length) for point in self.points_won_receiving]) / len(self.points_won_receiving)))
 
         self.breaks = [game for game in self.games if game.server != self.name and game.winner == self.name]
         self.breakpoints = [point for point in self.all_points if point.server == self.opponent
@@ -350,26 +358,29 @@ class Stats:
         self.winners = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result in Constants.winner]
         self.forcing_errors = [point for point in self.points_won if point.shots[-1].player == self.name and point.shots[-1].result in Constants.forcing_error]
 
-        self.points_pct = round(len(self.points_won) * 100 / len(self.all_points))
+        self.points_pct = (None if not len(self.all_points) else round(len(self.points_won) * 100 / len(self.all_points)))
         self.points_won_1st_serve = [point for point in self.points_won if point.server == self.name and Constants.second_serve not in point.stroke_types]
-        self.points_pct_1st_serve = round(len(self.points_won_1st_serve) * 100 / len(self.first_serves_in))
+        self.points_pct_1st_serve = (None if not len(self.first_serves_in) else round(len(self.points_won_1st_serve) * 100 / len(self.first_serves_in)))
         self.points_won_2nd_serve = [point for point in self.points_won if point.server == self.name and Constants.second_serve in point.stroke_types]
-        self.points_pct_2nd_serve = round(len(self.points_won_2nd_serve) * 100 / len(self.second_serves))
+        self.points_pct_2nd_serve = (None if not len(self.second_serves) else round(len(self.points_won_2nd_serve) * 100 / len(self.second_serves)))
+
         self.points_won_receiving = [point for point in self.points_won if point.receiver == self.name]
-        self.points_pct_receiving = round(len(self.points_won_receiving) * 100 / len(self.receiving_points))
+        self.points_pct_receiving = (None if not len(self.receiving_points) else round(len(self.points_won_receiving) * 100 / len(self.receiving_points)))
 
         self.aggressive_margin = len(self.aces + self.serve_winners + self.winners + self.forcing_errors) - len(self.double_faults + self.unforced_errors)
         self.aggressive_margin_pct = round(self.aggressive_margin * 100 / len(self.all_points))
 
         self.returns_1st_serve = [point for point in self.receiving_points if Constants.first_return in point.stroke_types]
         self.returns_1st_in_play = [shot for point in self.returns_1st_serve for shot in point.shots if shot.stroke_type == Constants.first_return and shot.result in Constants.not_out]
-        self.returns_1st_pct = round(len(self.returns_1st_in_play) * 100 / len(self.returns_1st_serve))
+        self.returns_1st_pct = (None if not len(self.returns_1st_serve) else round(len(self.returns_1st_in_play) * 100 / len(self.returns_1st_serve)))
+
         self.returns_2nd_serve = [point for point in self.receiving_points if Constants.second_return in point.stroke_types]
         self.returns_2nd_in_play = [shot for point in self.returns_2nd_serve for shot in point.shots if shot.stroke_type == Constants.second_return and shot.result in Constants.not_out]
-        self.returns_2nd_pct = round(len(self.returns_2nd_in_play) * 100 / len(self.returns_2nd_serve))
+        self.returns_2nd_pct = (None if not len(self.returns_2nd_serve) else round(len(self.returns_2nd_in_play) * 100 / len(self.returns_2nd_serve)))
+
         self.returns = self.returns_1st_serve + self.returns_2nd_serve
         self.returns_in_play = self.returns_1st_in_play + self.returns_2nd_in_play
-        self.returns_in_play_pct = round(len(self.returns_in_play) * 100 / len(self.returns))
+        self.returns_in_play_pct = (None if not len(self.returns) else round(len(self.returns_in_play) * 100 / len(self.returns)))
 
     def __repr__(self):
         return repr((self.first_serves_pct, self.second_serves_pct))
@@ -378,18 +389,24 @@ class Stats:
 class FormatStats:
 
     def __init__(self, stats):
-        self.first_serve_pct = "{0:.0f}%".format(stats.first_serve_pct)
+        self.first_serve_pct = ("" if not stats.first_serve_pct else "{0:.0f}%".format(stats.first_serve_pct))
         self.aces_service_winners = "{0:.0f} / {1:.0f}".format(len(stats.aces), len(stats.serve_winners))
         self.double_faults = "{0:.0f}".format(len(stats.double_faults))
         self.unforced_errors = "{0:.0f}".format(len(stats.unforced_errors))
         self.winners_forcing_errors = "{0:.0f} / {1:.0f}".format(len(stats.winners), len(stats.forcing_errors))
         self.points_won = "{0} ({1:.0f}%)".format(len(stats.points_won), stats.points_pct)
-        self.points_won_1st_serve = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_1st_serve), len(stats.first_serves_in), stats.points_pct_1st_serve)
-        self.points_won_2nd_serve = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_2nd_serve), len(stats.second_serves), stats.points_pct_2nd_serve)
-        self.points_won_receiving = "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_receiving), len(stats.receiving_points), stats.points_pct_receiving)
-        self.break_points_converted = "{0} of {1} ({2:.0f}%)".format(len(stats.breaks), len(stats.breakpoints), stats.breakpoints_pct)
-        self.successful_net_approaches = "{0} of {1} ({2:.0f}%)".format(len(stats.approach_shots_won), len(stats.approach_shots), stats.approach_shots_pct)
-        self.returns_in_play = "{0:.0f}% ({1:.0f}% / {2:.0f}%)".format(stats.returns_in_play_pct, stats.returns_1st_pct, stats.returns_2nd_pct)
+        self.points_won_1st_serve = ("" if not (len(stats.points_won_1st_serve) and len(stats.first_serves_in) and stats.points_pct_1st_serve) else
+                                     "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_1st_serve), len(stats.first_serves_in), stats.points_pct_1st_serve))
+        self.points_won_2nd_serve = ("" if not (len(stats.points_won_2nd_serve) and len(stats.second_serves) and stats.points_pct_2nd_serve) else
+                                     "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_2nd_serve), len(stats.second_serves), stats.points_pct_2nd_serve))
+        self.points_won_receiving = ("" if not (len(stats.points_won_receiving) and len(stats.receiving_points) and stats.points_pct_receiving) else
+                                     "{0} of {1} ({2:.0f}%)".format(len(stats.points_won_receiving), len(stats.receiving_points), stats.points_pct_receiving))
+        self.break_points_converted = ("" if not (len(stats.breaks) and len(stats.breakpoints) and stats.breakpoints_pct) else
+                                       "{0} of {1} ({2:.0f}%)".format(len(stats.breaks), len(stats.breakpoints), stats.breakpoints_pct))
+        self.successful_net_approaches = ("" if not (len(stats.approach_shots_won) and len(stats.approach_shots) and stats.approach_shots_pct) else
+                                          "{0} of {1} ({2:.0f}%)".format(len(stats.approach_shots_won), len(stats.approach_shots), stats.approach_shots_pct))
+        self.returns_in_play = ("" if not (stats.returns_in_play_pct and stats.returns_1st_pct and stats.returns_2nd_pct) else
+                                "{0:.0f}% ({1:.0f}% / {2:.0f}%)".format(stats.returns_in_play_pct, stats.returns_1st_pct, stats.returns_2nd_pct))
         self.aggressive_margin = "{0:.0f} ({1:.0f}%)".format(stats.aggressive_margin, stats.aggressive_margin_pct)
 
 
@@ -409,7 +426,14 @@ def parse(filename):
       data = line.strip().split(',')
       data += ['' for x in range(10)]
       if data[0] == Constants.MatchDetails:
-         players = data[1:3]
+         sides = data[1:3]
+         if '+' in sides[0] or '&' in sides[0]:
+             side_1_separator = ('+' if sides[0].find('+') > -1 else '&')
+             side_2_separator = ('+' if sides[1].find('+') > -1 else '&')
+             players = sides[0].split(side_1_separator) + sides[0].split(side_2_separator)
+             players = [player.strip() for player in players]
+         else:
+             players = sides
          match_date = data[3]
          in_out = data[6]
       elif data[0] == Constants.Format:
@@ -448,20 +472,20 @@ def parse(filename):
    if sets == [] and games != []:
        sets.append(Set(players, '', '', '', games=games))
 
-   return Match(players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
+   return Match(sides, players, match_date, in_out, number_of_sets, match_games, format_description, advantage, lets,
                 start_time, finish_time, first_server, player_ends, winner, sets)
 
 
 def match_stats(match):
-    player_one = match.players[0]
-    player_two = match.players[1]
-    player_one_stats = PlayerStats(player_one, match)
-    player_two_stats = PlayerStats(player_two, match)
-    p1fs = FormatStats(player_one_stats.match_stats)
-    p2fs = FormatStats(player_two_stats.match_stats)
+    side_one = match.sides[0]
+    side_two = match.sides[1]
+    side_one_stats = PlayerStats(side_one, match)
+    side_two_stats = PlayerStats(side_two, match)
+    p1fs = FormatStats(side_one_stats.match_stats)
+    p2fs = FormatStats(side_two_stats.match_stats)
 
     width = 25
-    print (player_one.center(width), "--PLAYER--".center(width), player_two.center(width))
+    print (side_one.center(width), "--PLAYER--".center(width), side_two.center(width))
     print (p1fs.first_serve_pct.center(width), "First Serve Percentage".center(width), p2fs.first_serve_pct.center(width))
     print (p1fs.aces_service_winners.center(width), "Aces/Service Winners".center(width), p2fs.aces_service_winners.center(width))
     print (p1fs.double_faults.center(width), "Double Faults".center(width), p2fs.double_faults.center(width))
