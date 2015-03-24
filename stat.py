@@ -684,9 +684,9 @@ class Serve:
         self.first.placement[Constants.ServeIn] = Counter([shot.placement for shot in first.all_shots_in])
         self.second.placement[Constants.ServeIn] = Counter([shot.placement for shot in second.all_shots_in])
         self.first.placement[Constants.Out] = Counter([shot.placement for shot in first.errors[Constants.Out] + first.errors[Constants.OutOffNet]])
-        self.second.placement[Constants.Out] = Counter([shot.placement for shot in second.errors[Constants.Out] + first.errors[Constants.OutOffNet]])
+        self.second.placement[Constants.Out] = Counter([shot.placement for shot in second.errors[Constants.Out] + second.errors[Constants.OutOffNet]])
         self.first.placement[Constants.Netted] = Counter([shot.placement for shot in first.errors[Constants.Netted]])
-        self.second.placement[Constants.Netted] = Counter([shot.placement for shot in first.errors[Constants.Netted]])
+        self.second.placement[Constants.Netted] = Counter([shot.placement for shot in second.errors[Constants.Netted]])
 
     def calc_placement(self):
         service_locations = {'Near Deuce': {'court': Constants.NearCourt, 'x': [120, 180],
