@@ -107,8 +107,29 @@ class Constants:
     ''' Shot Trajectory '''
     Crosscourt = 'Crosscourt'
     ShortAngle = 'Short Angle'
-    Middle = 'Middle'
+    Center = 'Center'
     Line = 'Line'
+
+    ''' Locations '''
+    DoublesAlley = 'Doubles Alley'
+    VolleyZone = 'Volley Zone'
+    LtSvcBox = 'Left Service Box'
+    RtSvcBox = 'Right Service Box'
+    ServiceLine = 'Service Line'
+    NoMans = "No Man's"
+    Baseline = 'Baseline'
+    Net = 'Net'
+    Long = 'Long'
+    Deep = 'Deep'
+
+    ''' Courts '''
+    FarCourt = 'Far'
+    NearCourt = 'Near'
+
+    ''' Placement '''
+    Wide = 'Wide'
+    Body = 'Body'
+    T = 'T'
 
     Fifteen = '15'
     Thirty = '30'
@@ -143,9 +164,9 @@ class Comment:
 
 class Coordinate:
 
-   def __init__(self, x, y):
+   def __init__(self, x, y, c_type):
       [self.court, self.in_doubles, self.in_singles] = [None, None, None]
-      [self.right_service_box, self.left_service_box, self.volley_zone, self.service_line] = [None, None, None, None]
+      [self.right_service_box, self.left_service_box, self.service_boxes, self.service_line] = [None, None, None, None]
       [self.no_mans_land, self.baseline, self.court, self.location, self.x, self.y] = [None, None, None, None, None, None]
 
       if not (x or y):
@@ -154,27 +175,30 @@ class Coordinate:
       self.x = float(x)
       self.y = float(y)
 
-      self.court = ('Net' if self.y == Constants.net_y else ('Far' if self.y < Constants.net_y else 'Near'))
+      self.court = (Constants.Net if self.y == Constants.net_y else (Constants.FarCourt if self.y < Constants.net_y else Constants.NearCourt))
       self.in_doubles = (self.between(Constants.doubles_wide_x, self.x) and self.between(Constants.out_long_y, self.y) and not (self.y == Constants.net_y))
       self.in_singles = (self.between(Constants.singles_wide_x, self.x) and self.between(Constants.out_long_y, self.y) and not (self.y == Constants.net_y))
+      self.volley_zone = self.between(Constants.service_line_y, self.y and not self.court == Constants.Net)
       self.right_service_box = (self.between(Constants.service_line_y, self.y) and
-                                ((self.between(Constants.svc_left_x, self.x) and self.court == 'Far')
-                                or (self.between(Constants.svc_right_x, self.x) and self.court == 'Near')))
+                                ((self.between(Constants.svc_left_x, self.x) and self.court == Constants.FarCourt)
+                                or (self.between(Constants.svc_right_x, self.x) and self.court == Constants.NearCourt)))
       self.left_service_box = (self.between(Constants.service_line_y, self.y) and
-                               ((self.between(Constants.svc_right_x, self.x) and self.court == 'Far')
-                               or (self.between(Constants.svc_left_x, self.x) and self.court == 'Near')))
-      self.volley_zone = (self.left_service_box or self.right_service_box)
-      self.service_line = (self.between(Constants.no_mans_zone_y, self.y) and not self.volley_zone)
-      self.no_mans_land = (self.between(Constants.baseline_zone_y, self.y) and not (self.volley_zone or self.service_line))
-      self.baseline = (self.between(Constants.out_long_y, self.y) and not (self.volley_zone or self.service_line or self.no_mans_land))
+                               ((self.between(Constants.svc_right_x, self.x) and self.court == Constants.FarCourt)
+                               or (self.between(Constants.svc_left_x, self.x) and self.court == Constants.NearCourt)))
+      self.service_boxes = (self.left_service_box or self.right_service_box)
+      self.service_line = (self.between(Constants.no_mans_zone_y, self.y) and not self.service_boxes and not self.court == Constants.Net)
+      self.no_mans_land = (self.between(Constants.baseline_zone_y, self.y) and not (self.service_boxes or self.service_line) and not self.court == Constants.Net)
+      self.baseline = (self.between(Constants.out_long_y, self.y) and not (self.service_boxes or self.service_line or self.no_mans_land) and not self.court == Constants.Net)
+      self.doubles_alley = (self.in_doubles and not self.in_singles)
 
-      self.location = ('Doubles Alley' if (self.in_doubles and not self.in_singles) else
-                       ('Left Service Box' if self.left_service_box else
-                        ('Right Service Box' if self.right_service_box else
-                         ('Service Line' if self.service_line else
-                          ("No Man's" if self.no_mans_land else
-                           ('Baseline' if self.baseline else
-                            ('Net' if self.court == 'Net' else 'Out')))))))
+      self.location = (Constants.LtSvcBox if self.left_service_box else
+                       (Constants.RtSvcBox if self.right_service_box else
+                        (Constants.ServiceLine if self.service_line else
+                         (Constants.VolleyZone if self.volley_zone else
+                          (Constants.NoMans if self.no_mans_land else
+                           (Constants.Baseline if self.baseline else
+                            (Constants.Net if self.court == Constants.Net else
+                             (Constants.Long if c_type == 'mark' else Constants.Deep))))))))
 
    def between(self, coordinate_pair, z):
        return (True if z >= coordinate_pair[0] and z <= coordinate_pair[1] else False)
@@ -200,7 +224,7 @@ class Path:
            else:
                self.trajectory = Constants.Crosscourt
        elif self.mark.x > Constants.centerline_x - 40 and self.mark.x < Constants.centerline_x + 40:
-           self.trajectory = Constants.Middle
+           self.trajectory = Constants.Center
        else:
            self.trajectory = Constants.Line
 
@@ -222,7 +246,7 @@ class Shot:
       self.player = players[competitors.index(player)]
       self.stroke = stroke
       self.stroke_type = stroke_type
-      self.path = Path(Coordinate(stroke_x, stroke_y), Coordinate(result_x, result_y))
+      self.path = Path(Coordinate(stroke_x, stroke_y, 'impact'), Coordinate(result_x, result_y, 'mark'))
       self.result = result
       self.r_misc = r_misc
       self.s_time = s_time
@@ -274,6 +298,9 @@ class Game:
       self.score = {players[0]: player_1_score, players[1]: player_2_score}
       self.points = points
       self.g_time = g_time
+      self.breakpoints = [point for point in self.points
+                          if (point.score[self.receiver] == Constants.Advantage
+                              or (point.score[self.receiver] == Constants.Forty and point.score[self.server] != Constants.Forty))]
 
    def __repr__(self):
       return repr((self.winner, self.score, self.points[-1].score))
@@ -321,7 +348,7 @@ class Match:
       self.side_one_stats = PlayerStats(self.side_one, self)
       self.side_two_stats = PlayerStats(self.side_two, self)
 
-   def display_stats(self, width=25, dataset='match', grouping='Basic', view='Compare'):
+   def display_stats(self, width=30, dataset='match', grouping='Basic', view='Table'):
       if dataset == 'match':
           p1s = self.side_one_stats.match_stats
           p2s = self.side_two_stats.match_stats
@@ -367,7 +394,6 @@ class Stats:
         self.games = games
         self.base_stats()
         self.stroke_stats()
-        self.placement_stats()
         self.point_stats()
         self.stats()
 
@@ -375,6 +401,9 @@ class Stats:
         self.games_won = [game for game in self.games if self.player == game.winner]
         self.service_games = [game for game in self.games if game.server in self.player]
         self.receiving_games = [game for game in self.games if game not in self.service_games]
+        self.breaks = [game for game in self.games if game.server != self.player and game.winner == self.player]
+        self.break_opportunities = [game for game in self.receiving_games if len(game.breakpoints) > 0]
+        self.breakgames_pct = (None if not len(self.break_opportunities) else round(len(self.breaks) * 100 / len(self.break_opportunities)))
         self.opponent = (None if not len(self.service_games) else self.service_games[0].receiver)
 
         self.all_points = [point for game in self.games for point in game.points]
@@ -392,6 +421,7 @@ class Stats:
 
         self.winners = self.forehand.winners[Constants.All] + self.backhand.winners[Constants.All] + self.service_return.winners[Constants.All]
         self.unforced_errors = self.forehand.errors[Constants.All] + self.backhand.errors[Constants.All] + self.service_return.errors[Constants.All]
+        self.forced_errors = [shot for shot in self.all_opponent_shots if shot.result in Constants.ForcingErrors]
 
         self.winning_shots = self.forehand.winners[Constants.WinningShots] + self.backhand.winners[Constants.WinningShots] + self.service_return.winners[Constants.WinningShots]
         self.forcing_errors = self.forehand.winners[Constants.ForcingShots] + self.backhand.winners[Constants.ForcingShots] + self.service_return.winners[Constants.ForcingShots]
@@ -408,11 +438,6 @@ class Stats:
         self.approach_attempts = self.approach_shots + self.opponent_failed_passing + self.opponent_passing_winners
         self.points_won_at_net = self.approach_shot_winners + self.opponent_failed_passing
         self.approach_attempts_pct = (None if not len(self.approach_attempts) else math.ceil(len(self.points_won_at_net) * 100 / len(self.approach_attempts)))
-        return
-
-    def placement_stats(self):
-        # inserves = [shot for shot in self.serve.near_court_deuce if shot.result in Constants.InServiceOutcomes]
-        # [shot for shot in inserves if abs(shot.path.angle)
         return
 
     def between(self, coordinate_pair, z):
@@ -439,7 +464,6 @@ class Stats:
         self.avg_rally_length_points_won_receiving = (None if not len(self.points_won_receiving) else
                                                       math.ceil(sum([int(point.rally_length) for point in self.points_won_receiving]) / len(self.points_won_receiving)))
 
-        self.breaks = [game for game in self.games if game.server != self.player and game.winner == self.player]
         self.breakpoints = [point for point in self.all_points if point.server == self.opponent
                             and (point.score[self.player] == Constants.Advantage
                                  or (point.score[self.player] == Constants.Forty and point.score[self.opponent] != Constants.Forty))]
@@ -493,6 +517,7 @@ class Stats:
         self.stats.append(Stat("Unforced Errors", ['Basic'], self.unforced_errors, format_n.format(len(self.unforced_errors))))
         self.stats.append(Stat("Winners/Forcing Errors", ['Basic'], len(self.winning_shots + self.forcing_errors),
                                format_nn.format(len(self.winning_shots), len(self.forcing_errors))))
+        self.stats.append(Stat("Winning Returns", ['Basic'], self.service_return.winners[Constants.All], format_n.format(len(self.service_return.winners[Constants.All]))))
         self.stats.append(Stat("Total Points Won", ['Basic'], self.points_won, format_n_p.format(len(self.points_won), self.points_pct)))
         self.stats.append(Stat("Points Won 1st Serve", ['Basic'], self.points_won_1st_serve,
                                ("" if not (len(self.points_won_1st_serve) and len(self.first_serves_in) and self.points_pct_1st_serve) else
@@ -506,6 +531,9 @@ class Stats:
         self.stats.append(Stat("Break Points Converted", ['Basic'], self.breaks,
                                ("" if not (len(self.breaks) and len(self.breakpoints) and self.breakpoints_pct) else
                                 format_fs_p.format(len(self.breaks), len(self.breakpoints), self.breakpoints_pct))))
+        self.stats.append(Stat("Break Games Converted", ['Basic'], self.breaks,
+                               ("" if not (len(self.breaks) and len(self.break_opportunities) and self.breakgames_pct) else
+                                format_fs_p.format(len(self.breaks), len(self.break_opportunities), self.breakgames_pct))))
         self.stats.append(Stat("Successful Net Approaches", ['Basic'], self.points_won_at_net,
                                ("" if not (len(self.points_won_at_net) and len(self.approach_attempts) and self.approach_attempts_pct) else
                                 format_fs_p.format(len(self.points_won_at_net), len(self.approach_attempts), self.approach_attempts_pct))))
@@ -517,6 +545,87 @@ class Stats:
                                 "{0:.0f}% ({1:.0f}% / {2:.0f}%)".format(self.returns_in_play_pct, self.returns_1st_pct, self.returns_2nd_pct))))
         self.stats.append(Stat("Aggressive Margin", ['Basic'], self.aggressive_margin,
                                format_n_p.format(self.aggressive_margin, self.aggressive_margin_pct)))
+
+        format_wbt = "{0:3}% Wide, {1:3}% Body, {2:3}% T"
+        placement = 'Placement'
+        for result in ['In', 'Ace', 'Netted', 'Out']:
+            total = sum(self.serve.first.placement[result].values())
+            self.stats.append(Stat("1st Serves " + result, [placement], total,
+                              format_wbt.format((0 if not total else round(self.serve.first.placement[result][Constants.Wide] * 100 / total)),
+                                                (0 if not total else round(self.serve.first.placement[result][Constants.Body] * 100 / total)),
+                                                (0 if not total else round(self.serve.first.placement[result][Constants.T] * 100 / total)))))
+            total = sum(self.serve.second.placement[result].values())
+            self.stats.append(Stat("2nd Serves " + result, [placement], total,
+                              format_wbt.format((0 if not total else round(self.serve.second.placement[result][Constants.Wide] * 100 / total)),
+                                                (0 if not total else round(self.serve.second.placement[result][Constants.Body] * 100 / total)),
+                                                (0 if not total else round(self.serve.second.placement[result][Constants.T] * 100 / total)))))
+
+        total_winners = len(self.winning_shots)
+        format_pct = "{0:3}% ({1} of {2})"
+        points_won_at_net = [shot for shot in self.winning_shots if shot.path.impact.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
+        winners_at_net_pct = (0 if not total_winners else round(len(points_won_at_net) * 100 / total_winners))
+        self.stats.append(Stat("% Winners at Net", [placement], winners_at_net_pct,
+                               format_pct.format(winners_at_net_pct, len(points_won_at_net), total_winners)))
+        points_won_in_nomans = [shot for shot in self.winning_shots if shot.path.impact.location in ["No Man's", "Service Line"]]
+        winners_from_nomans_pct = (0 if not total_winners else round(len(points_won_in_nomans) * 100 / total_winners))
+        self.stats.append(Stat("% Winners from No Man's", [placement], winners_from_nomans_pct,
+                               format_pct.format(winners_from_nomans_pct, len(points_won_in_nomans), total_winners)))
+        points_won_baseline = [shot for shot in self.winning_shots if shot.path.impact.location in ["Baseline", "Out"]]
+        winners_from_baseline_pct = (0 if not total_winners else round(len(points_won_baseline) * 100 / total_winners))
+        self.stats.append(Stat("% Winners from Baseline", [placement], winners_from_baseline_pct,
+                               format_pct.format(winners_from_baseline_pct, len(points_won_baseline), total_winners)))
+
+        total_forced_errors = len(self.forced_errors)
+        forced_errors_at_net = [shot for shot in self.forced_errors if shot.path.mark.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
+        forced_errors_net_pct = (0 if not total_forced_errors else round(len(forced_errors_at_net) * 100 / total_forced_errors))
+        self.stats.append(Stat("% Forced Errors at Net", [placement], forced_errors_net_pct,
+                               format_pct.format(forced_errors_net_pct, len(forced_errors_at_net), total_forced_errors)))
+        forced_errors_in_nomans = [shot for shot in self.forced_errors if shot.path.mark.location in ["No Man's", "Service Line"]]
+        forced_errors_nomans_pct = (0 if not total_forced_errors else round(len(forced_errors_in_nomans) * 100 / total_forced_errors))
+        self.stats.append(Stat("% Forced Errors from No Man's", [placement], forced_errors_nomans_pct,
+                               format_pct.format(forced_errors_nomans_pct, len(forced_errors_in_nomans), total_forced_errors)))
+        forced_errors_baseline = [shot for shot in self.forced_errors if shot.path.mark.location in ["Baseline", "Out"]]
+        forced_errors_baseline_pct = (0 if not total_forced_errors else round(len(forced_errors_baseline) * 100 / total_forced_errors))
+        self.stats.append(Stat("% Forced Errors from Baseline", [placement], forced_errors_baseline_pct,
+                               format_pct.format(forced_errors_baseline_pct, len(forced_errors_baseline), total_forced_errors)))
+
+        total_unforced_errors = len(self.unforced_errors)
+        unforced_errors_at_net = [shot for shot in self.unforced_errors if shot.path.impact.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
+        unforced_errors_net_pct = (0 if not total_unforced_errors else round(len(unforced_errors_at_net) * 100 / total_unforced_errors))
+        self.stats.append(Stat("% Unforced Errors at Net", [placement], unforced_errors_net_pct,
+                               format_pct.format(unforced_errors_net_pct, len(unforced_errors_at_net), total_unforced_errors)))
+        unforced_errors_in_nomans = [shot for shot in self.unforced_errors if shot.path.impact.location in ["No Man's", "Service Line"]]
+        unforced_errors_nomans_pct = (0 if not total_unforced_errors else round(len(unforced_errors_in_nomans) * 100 / total_unforced_errors))
+        self.stats.append(Stat("% Unforced Errors from No Man's", [placement], unforced_errors_nomans_pct,
+                               format_pct.format(unforced_errors_nomans_pct, len(unforced_errors_in_nomans), total_unforced_errors)))
+        unforced_errors_baseline = [shot for shot in self.unforced_errors if shot.path.impact.location in ["Baseline", "Out"]]
+        unforced_errors_baseline_pct = (0 if not total_unforced_errors else round(len(unforced_errors_baseline) * 100 / total_unforced_errors))
+        self.stats.append(Stat("% Unforced Errors from Baseline", [placement], unforced_errors_baseline_pct,
+                               format_pct.format(unforced_errors_baseline_pct, len(unforced_errors_baseline), total_unforced_errors)))
+
+        format_errors = "{0}: {1} {2} {3} {4} {5} {6}"
+        top_unforced_errors = Counter([(u.path.impact.location, u.path.trajectory, u.stroke, u.stroke_type, u.result, u.path.mark.location) for u in self.unforced_errors])
+        sorted_errors = sorted([[top_unforced_errors[key], key] for key in top_unforced_errors], key=lambda x: x[0], reverse=True)
+        top_errors = [error for error in sorted_errors if error[0] > 1]
+        for count in range(0, 3):
+            if count < len(top_errors):
+                error_type = list(top_errors[count][1])
+                self.stats.append(Stat("#" + str(count + 1) + " Unforced Error", [placement], top_errors[count][0],
+                                       format_errors.format(top_errors[count][0], *error_type)))
+            else:
+                self.stats.append(Stat("#" + str(count + 1) + " Unforced Error", [placement], '',
+                                       format_errors.format(0, '', '', '', '', '', '')))
+
+        # top_forced_errors = Counter([(u.path.impact.location, u.path.trajectory, u.stroke, u.result, u.path.mark.location) for u in self.forced_errors])
+        # top_error_types = [key for key in top_forced_errors.keys() if top_forced_errors[key] > 2]
+        # for count in range(1, 4):
+        #     if count <= len(top_error_types):
+        #         error_type = list(top_error_types[count - 1])
+        #         self.stats.append(Stat("#" + str(count) + " Forced Error", [placement], top_error_types[count - 1],
+        #                                format_errors.format(top_unforced_errors[top_error_types[count - 1]], *error_type)))
+        #     else:
+        #         self.stats.append(Stat("#" + str(count) + " Forced Error", [placement], '',
+        #                                format_errors.format(0, '', '', '', '', '')))
 
         format_fb = "{0:2}: Fhd {1:2} / Bhd {2:2}"
         format_fs = "{0:2}: 1st {1:2} / 2nd {2:2}"
@@ -542,7 +651,7 @@ class Stats:
         errors_other = self.forehand.other.error_number + self.backhand.other.error_number
         self.stats.append(Stat(Constants.Other, [unforced], errors_other,
                                format_fb.format(errors_other, self.forehand.other.error_number, self.backhand.other.error_number)))
-        self.stats.append(Stat(Constants.Other, [unforced], self.service_return.error_number,
+        self.stats.append(Stat(Constants.Return, [unforced], self.service_return.error_number,
                                format_fs.format(self.service_return.error_number, self.service_return.first.error_number, self.service_return.second.error_number)))
         return
 
@@ -580,10 +689,14 @@ class Serve:
         self.second.placement[Constants.Netted] = Counter([shot.placement for shot in first.errors[Constants.Netted]])
 
     def calc_placement(self):
-        service_locations = {'Near Deuce': {'court': 'Near', 'x': [120, 180], 'placements': {'Wide': [45, 65], 'Body': [65, 78], 'T': [78, 90], 'O': [90, 180]}},
-                             'Near Ad': {'court': 'Near', 'x': [60, 120], 'placements': {'Wide': [115, 135], 'Body': [102, 115], 'T': [90, 102], 'O': [45, 90]}},
-                             'Far Deuce': {'court': 'Far', 'x': [60, 120], 'placements': {'Wide': [115, 135], 'Body': [102, 115], 'T': [90, 102], 'O': [45, 90]}},
-                             'Far Ad': {'court': 'Far', 'x': [120, 180], 'placements': {'Wide': [45, 65], 'Body': [65, 78], 'T': [78, 90], 'O': [90, 180]}}}
+        service_locations = {'Near Deuce': {'court': Constants.NearCourt, 'x': [120, 180],
+                                            'placements': {Constants.Wide: [45, 65], Constants.Body: [65, 78], Constants.T: [78, 90], 'O': [90, 180]}},
+                             'Near Ad': {'court': Constants.NearCourt, 'x': [60, 120],
+                                         'placements': {Constants.Wide: [115, 135], Constants.Body: [102, 115], Constants.T: [90, 102], 'O': [45, 90]}},
+                             'Far Deuce': {'court': Constants.FarCourt, 'x': [60, 120],
+                                           'placements': {Constants.Wide: [115, 135], Constants.Body: [102, 115], Constants.T: [90, 102], 'O': [45, 90]}},
+                             'Far Ad': {'court': Constants.FarCourt, 'x': [120, 180],
+                                        'placements': {Constants.Wide: [45, 65], Constants.Body: [65, 78], Constants.T: [78, 90], 'O': [90, 180]}}}
         for shot in self.shots:
             for key in service_locations.keys():
                 location = service_locations[key]
@@ -729,8 +842,11 @@ def parse(filename):
                 start_time, finish_time, first_server, player_ends, winner, sets)
 
 
-match = parse('abcd.csv')
-match.display_stats()
+def process(filename):
+   match = parse(filename)
+   match.display_stats(grouping='Basic')
+   match.display_stats(grouping='Unforced Errors', width=30)
+   match.display_stats(grouping='Placement', width=50)
 
-p1s = match.side_one_stats.match_stats
-p2s = match.side_two_stats.match_stats
+# p1s = match.side_one_stats.match_stats
+# p2s = match.side_two_stats.match_stats
