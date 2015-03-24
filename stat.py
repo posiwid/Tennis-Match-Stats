@@ -2,6 +2,8 @@ import datetime
 import math
 from collections import Counter
 
+''' How many returns down the line, to the center, crosscourt? '''
+
 
 class Constants:
     date_format = '%d-%b-%Y'
@@ -230,7 +232,6 @@ class Path:
 
        delta_x = self.impact.x - self.mark.x
        delta_y = self.impact.y - self.mark.y
-       ''' angle can be used to calculate inside-out forehands/backhands or Wide-Body-T Serves'''
        self.angle = math.degrees(math.atan2(delta_y, delta_x))
        self.distance = math.sqrt((delta_x) ** 2 + (delta_y) ** 2)
 
@@ -416,6 +417,13 @@ class Stats:
 
         self.forehand = KeyShot(*[StrokeType(Constants.Forehand, stroke_type, self.all_player_shots) for stroke_type in Constants.KeyStrokeTypes])
         self.backhand = KeyShot(*[StrokeType(Constants.Backhand, stroke_type, self.all_player_shots) for stroke_type in Constants.KeyStrokeTypes])
+        self.forehand.calculate_hand('Forehand')
+        self.backhand.calculate_hand('Backhand')
+        self.hand = ('Right' if (self.forehand.hand == 'Right' and self.backhand.hand == 'Right')
+                     or (self.forehand.hand == 'Right' and self.backhand.hand == 'None')
+                     or (self.forehand.hand == 'None' and self.backhand.hand == 'Right')
+                     else 'Left')
+
         self.serve = Serve(*[StrokeType(Constants.Serve, serve_type, self.all_player_shots) for serve_type in Constants.ServeTypes])
         self.service_return = Return(*[StrokeType(Constants.Return, return_type, self.all_player_shots) for return_type in Constants.ReturnStrokeTypes])
 
@@ -438,6 +446,21 @@ class Stats:
         self.approach_attempts = self.approach_shots + self.opponent_failed_passing + self.opponent_passing_winners
         self.points_won_at_net = self.approach_shot_winners + self.opponent_failed_passing
         self.approach_attempts_pct = (None if not len(self.approach_attempts) else math.ceil(len(self.points_won_at_net) * 100 / len(self.approach_attempts)))
+
+        self.forehand.inside_outs = [shot for shot in self.forehand.shots
+                                     if self.hand == 'Right'
+                                     and ((shot.path.impact.court == 'Far' and abs(shot.path.angle) < 80)
+                                          or (shot.path.impact.court == 'Near' and shot.path.angle > 100))
+                                     or self.hand == 'Left'
+                                     and ((shot.path.impact.court == 'Far' and abs(shot.path.angle) > 100)
+                                          or (shot.path.impact.court == 'Near' and shot.path.angle < 80))]
+        self.backhand.inside_outs = [shot for shot in self.backhand.shots
+                                     if self.hand == 'Right'
+                                     and ((shot.path.impact.court == 'Far' and abs(shot.path.angle) > 100)
+                                          or (shot.path.impact.court == 'Near' and shot.path.angle < 80))
+                                     or self.hand == 'Left'
+                                     and ((shot.path.impact.court == 'Far' and abs(shot.path.angle) < 80)
+                                          or (shot.path.impact.court == 'Near' and shot.path.angle > 100))]
         return
 
     def between(self, coordinate_pair, z):
@@ -745,6 +768,18 @@ class KeyShot:
                        for k in Constants.Errors + [Constants.All]}
         self.shots_in = {k: fl([getattr(e, 'shots_in').get(k, 0) for e in [drives, slices, volleys, overheads, lobs, drop_shots, other]])
                          for k in Constants.InPlayOutcomes + [Constants.All]}
+
+    def calculate_hand(self, hand):
+        self.right_side = [shot.path.angle for shot in self.shots
+                           if (shot.path.impact.court == 'Near' and abs(shot.path.angle) > 100)
+                           or (shot.path.impact.court == 'Far' and abs(shot.path.angle) < 80)]
+        self.left_side = [shot.path.angle for shot in self.shots
+                          if (shot.path.impact.court == 'Far' and abs(shot.path.angle) > 100)
+                          or (shot.path.impact.court == 'Near' and abs(shot.path.angle) < 80)]
+        self.hand = ('Right' if (hand == 'Forehand' and len(self.left_side) > len(self.right_side))
+                     or (hand == 'Backhand' and len(self.right_side) > len(self.left_side))
+                     else ('Left' if (hand == 'Forehand' and len(self.right_side) > len(self.left_side))
+                           or (hand == 'Bakchand' and len(self.left_side) > len(self.right_side)) else 'None'))
 
     def __repr__(self):
         return repr((self.shots))
