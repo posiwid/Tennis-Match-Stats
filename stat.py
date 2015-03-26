@@ -2,7 +2,9 @@ import datetime
 import math
 from collections import Counter
 
-''' How many returns down the line, to the center, crosscourt? '''
+''' % 1st serves returned deep, per game graph, per set graph '''
+''' "Free points" given away on serve '''
+''' Avg Rally Lengths are not presented at present '''
 
 
 class Constants:
@@ -107,7 +109,7 @@ class Constants:
     ForcingShots = 'Forcing Shots'
 
     ''' Shot Trajectory '''
-    Crosscourt = 'Crosscourt'
+    Crosscourt = 'Cross-Court'
     ShortAngle = 'Short Angle'
     Center = 'Center'
     Line = 'Line'
@@ -122,7 +124,10 @@ class Constants:
     Baseline = 'Baseline'
     Net = 'Net'
     Long = 'Long'
-    Deep = 'Deep'
+    Defensive = 'Defensive'
+    AtNet = [VolleyZone, LtSvcBox, RtSvcBox]
+    Short = [VolleyZone, LtSvcBox, RtSvcBox, ServiceLine]
+    Deep = [NoMans, Baseline]
 
     ''' Courts '''
     FarCourt = 'Far'
@@ -200,7 +205,7 @@ class Coordinate:
                           (Constants.NoMans if self.no_mans_land else
                            (Constants.Baseline if self.baseline else
                             (Constants.Net if self.court == Constants.Net else
-                             (Constants.Long if c_type == 'mark' else Constants.Deep))))))))
+                             (Constants.Long if c_type == 'mark' else Constants.Defensive))))))))
 
    def between(self, coordinate_pair, z):
        return (True if z >= coordinate_pair[0] and z <= coordinate_pair[1] else False)
@@ -404,7 +409,7 @@ class Stats:
         self.receiving_games = [game for game in self.games if game not in self.service_games]
         self.breaks = [game for game in self.games if game.server != self.player and game.winner == self.player]
         self.break_opportunities = [game for game in self.receiving_games if len(game.breakpoints) > 0]
-        self.breakgames_pct = (None if not len(self.break_opportunities) else round(len(self.breaks) * 100 / len(self.break_opportunities)))
+        self.breakgames_pct = self.pct(self.breaks, self.break_opportunities)
         self.opponent = (None if not len(self.service_games) else self.service_games[0].receiver)
 
         self.all_points = [point for game in self.games for point in game.points]
@@ -445,7 +450,7 @@ class Stats:
         self.approach_shot_winners = [shot for shot in self.approach_shots if shot.result in Constants.WinningKeyShotOutcomes]
         self.approach_attempts = self.approach_shots + self.opponent_failed_passing + self.opponent_passing_winners
         self.points_won_at_net = self.approach_shot_winners + self.opponent_failed_passing
-        self.approach_attempts_pct = (None if not len(self.approach_attempts) else math.ceil(len(self.points_won_at_net) * 100 / len(self.approach_attempts)))
+        self.approach_attempts_pct = self.pct(self.points_won_at_net, self.approach_attempts, ceiling=True)
 
         self.forehand.inside_outs = [shot for shot in self.forehand.shots
                                      if self.hand == 'Right'
@@ -473,7 +478,8 @@ class Stats:
         self.points_missing_stat = [point for point in self.points_won if Constants.Missed in point.strokes]
         self.points_won_serving = [point for game in self.service_games for point in game.points if self.player == point.winner]
         self.points_won_receiving = [point for game in self.receiving_games for point in game.points if self.player == point.winner]
-        self.points_won_at_net_pct = (None if not len(self.points_won_at_net) else round(len(self.points_won_at_net) * 100 / len(self.points_won)))
+        self.points_lost_receiving = [point for game in self.receiving_games for point in game.points if self.player != point.winner]
+        self.points_won_at_net_pct = self.pct(self.points_won_at_net, self.points_won)
 
         self.avg_rally_length = (None if not len(self.all_points) else math.ceil(sum([int(point.rally_length) for point in self.all_points]) / len(self.all_points)))
         self.avg_rally_length_serving = (None if not len(self.service_points) else
@@ -490,37 +496,56 @@ class Stats:
         self.breakpoints = [point for point in self.all_points if point.server == self.opponent
                             and (point.score[self.player] == Constants.Advantage
                                  or (point.score[self.player] == Constants.Forty and point.score[self.opponent] != Constants.Forty))]
-        self.breakpoints_pct = (None if not len(self.breakpoints) else round(len(self.breaks) * 100 / len(self.breakpoints)))
+        self.breakpoints_pct = self.pct(self.breaks, self.breakpoints)
 
         self.first_serves = [shot for game in self.service_games for point in game.points for shot in point.shots if shot.stroke_type == Constants.FirstServe]
         self.first_serves_in = [serve for serve in self.first_serves if serve.result in Constants.NotOut and serve.result != Constants.Let]
 
-        self.points_pct = (None if not len(self.all_points) else round(len(self.points_won) * 100 / len(self.all_points)))
+        self.points_pct = self.pct(self.points_won, self.all_points)
         self.points_won_1st_serve = [point for point in self.points_won
                                      if point.server == self.player == point.winner
                                      and Constants.Missed not in point.strokes
                                      and Constants.SecondServe not in point.stroke_types]
-        self.points_pct_1st_serve = (None if not len(self.first_serves_in) else round(len(self.points_won_1st_serve) * 100 / len(self.first_serves_in)))
+        self.points_pct_1st_serve = self.pct(self.points_won_1st_serve, self.first_serves_in)
         self.points_won_2nd_serve = [point for point in self.points_won if point.server == self.player and Constants.SecondServe in point.stroke_types]
-        self.points_pct_2nd_serve = (None if not len(self.serve.second.shots) else round(len(self.points_won_2nd_serve) * 100 / len(self.serve.second.shots)))
+        self.points_pct_2nd_serve = self.pct(self.points_won_2nd_serve, self.serve.second.shots)
 
         self.points_won_receiving = [point for point in self.points_won if point.receiver == self.player]
-        self.points_pct_receiving = (None if not len(self.receiving_points) else round(len(self.points_won_receiving) * 100 / len(self.receiving_points)))
+        self.points_pct_receiving = self.pct(self.points_won_receiving, self.receiving_points)
 
         self.aggressive_margin = len(self.aces + self.serve_winners + self.winning_shots + self.forcing_errors) - len(self.double_faults + self.unforced_errors)
-        self.aggressive_margin_pct = round(self.aggressive_margin * 100 / len(self.all_points))
+        self.aggressive_margin_pct = self.pct(self.aggressive_margin, self.all_points)
 
-        self.returns_1st_serve = [point for point in self.receiving_points if Constants.FirstReturn in point.stroke_types or point.service_winner_1st]
-        self.returns_1st_in_play = [shot for point in self.returns_1st_serve for shot in point.shots if shot.stroke_type == Constants.FirstReturn and shot.result in Constants.NotOut]
-        self.returns_1st_pct = (None if not len(self.returns_1st_serve) else round(len(self.returns_1st_in_play) * 100 / len(self.returns_1st_serve)))
+        self.returns_1st_serve = [shot for shot in self.all_player_shots if shot.stroke_type == Constants.FirstReturn]
+        self.returns_1st_in_play = [shot for shot in self.returns_1st_serve if shot.result in Constants.NotOut]
+        self.returns_1st_pct = self.pct(self.returns_1st_in_play, self.returns_1st_serve)
 
-        self.returns_2nd_serve = [point for point in self.receiving_points if Constants.SecondReturn in point.stroke_types or point.service_winner_2nd]
-        self.returns_2nd_in_play = [shot for point in self.returns_2nd_serve for shot in point.shots if shot.stroke_type == Constants.SecondReturn and shot.result in Constants.NotOut]
-        self.returns_2nd_pct = (None if not len(self.returns_2nd_serve) else round(len(self.returns_2nd_in_play) * 100 / len(self.returns_2nd_serve)))
+        self.r1s_net = [shot for shot in self.returns_1st_serve if shot.path.mark.location in Constants.Net]
+        self.r1s_short = [shot for shot in self.returns_1st_serve if shot.path.mark.location in Constants.Short]
+        self.r1s_deep = [shot for shot in self.returns_1st_in_play if shot.path.mark.location in Constants.Deep]
+        self.r1s_long = [shot for shot in self.returns_1st_serve if shot.path.mark.location in Constants.Long]
+
+        self.returns_2nd_serve = [shot for shot in self.all_player_shots if shot.stroke_type == Constants.SecondReturn]
+        self.returns_2nd_in_play = [shot for shot in self.returns_2nd_serve if shot.result in Constants.NotOut]
+        self.returns_2nd_pct = self.pct(self.returns_2nd_in_play, self.returns_2nd_serve)
+
+        self.r2s_net = [shot for shot in self.returns_2nd_serve if shot.path.mark.location in Constants.Net]
+        self.r2s_short = [shot for shot in self.returns_2nd_serve if shot.path.mark.location in Constants.Short]
+        self.r2s_deep = [shot for shot in self.returns_2nd_in_play if shot.path.mark.location in Constants.Deep]
+        self.r2s_long = [shot for shot in self.returns_2nd_serve if shot.path.mark.location in Constants.Long]
 
         self.returns = self.returns_1st_serve + self.returns_2nd_serve
         self.returns_in_play = self.returns_1st_in_play + self.returns_2nd_in_play
-        self.returns_in_play_pct = (None if not len(self.returns) else round(len(self.returns_in_play) * 100 / len(self.returns)))
+        self.return_errors = [shot for shot in self.all_player_shots if shot.stroke == Constants.Return and shot not in self.returns_in_play]
+        self.returns_in_play_pct = self.pct(self.returns_in_play, self.returns)
+
+    def pct(self, numerator, denominator, ceiling=False):
+        numerator = (numerator if not isinstance(numerator, list) else (0 if not len(numerator) else len(numerator)))
+        denominator = (denominator if not isinstance(denominator, list) else (0 if not len(denominator) else len(denominator)))
+        if ceiling:
+            return (0 if not denominator else math.ceil(numerator * 100 / denominator))
+        else:
+            return (0 if not denominator else round(numerator * 100 / denominator))
 
     def stats(self):
         self.stats = []
@@ -538,6 +563,8 @@ class Stats:
         self.stats.append(Stat("Double Faults", ['Basic'], self.serve.double_faults, format_n.format(len(self.serve.double_faults))))
         self.stats.append(Stat("Lets", ['Basic'], self.lets, "{0:.0f}".format(len(self.lets))))
         self.stats.append(Stat("Unforced Errors", ['Basic'], self.unforced_errors, format_n.format(len(self.unforced_errors))))
+        self.stats.append(Stat("Return Errors (% of Unforced)", ['Basic'], self.return_errors,
+                               format_n_p.format(len(self.return_errors), self.pct(self.return_errors, self.unforced_errors))))
         self.stats.append(Stat("Winners/Forcing Errors", ['Basic'], len(self.winning_shots + self.forcing_errors),
                                format_nn.format(len(self.winning_shots), len(self.forcing_errors))))
         self.stats.append(Stat("Winning Returns", ['Basic'], self.service_return.winners[Constants.All], format_n.format(len(self.service_return.winners[Constants.All]))))
@@ -574,55 +601,135 @@ class Stats:
         for result in ['In', 'Ace', 'Netted', 'Out']:
             total = sum(self.serve.first.placement[result].values())
             self.stats.append(Stat("1st Serves " + result, [placement], total,
-                              format_wbt.format((0 if not total else round(self.serve.first.placement[result][Constants.Wide] * 100 / total)),
-                                                (0 if not total else round(self.serve.first.placement[result][Constants.Body] * 100 / total)),
-                                                (0 if not total else round(self.serve.first.placement[result][Constants.T] * 100 / total)))))
+                              format_wbt.format(self.pct(self.serve.first.placement[result][Constants.Wide], total),
+                                                self.pct(self.serve.first.placement[result][Constants.Body], total),
+                                                self.pct(self.serve.first.placement[result][Constants.T], total))))
+
             total = sum(self.serve.second.placement[result].values())
             self.stats.append(Stat("2nd Serves " + result, [placement], total,
-                              format_wbt.format((0 if not total else round(self.serve.second.placement[result][Constants.Wide] * 100 / total)),
-                                                (0 if not total else round(self.serve.second.placement[result][Constants.Body] * 100 / total)),
-                                                (0 if not total else round(self.serve.second.placement[result][Constants.T] * 100 / total)))))
+                              format_wbt.format(self.pct(self.serve.second.placement[result][Constants.Wide], total),
+                                                self.pct(self.serve.second.placement[result][Constants.Body], total),
+                                                self.pct(self.serve.second.placement[result][Constants.T], total))))
+
+        format_returns = "{0:3}% Net, {1:3}% Short, {2:3}% Deep, {3:3}% Long"
+        self.stats.append(Stat("1st Serve Returns Depth", [placement], len(self.returns_1st_serve),
+                               format_returns.format(self.pct(self.r1s_net, self.returns_1st_serve),
+                                                     self.pct(self.r1s_short, self.returns_1st_serve),
+                                                     self.pct(self.r1s_deep, self.returns_1st_serve),
+                                                     self.pct(self.r1s_long, self.returns_1st_serve))))
+
+        self.stats.append(Stat("2nd Serve Returns Depth", [placement], len(self.returns_2nd_serve),
+                               format_returns.format(self.pct(self.r2s_net, self.returns_2nd_serve),
+                                                     self.pct(self.r2s_short, self.returns_2nd_serve),
+                                                     self.pct(self.r2s_deep, self.returns_2nd_serve),
+                                                     self.pct(self.r2s_long, self.returns_2nd_serve))))
+
+        format_returns = "{0:3}% Short, {1:3}% CCrt, {2:3}% Ctr, {3:3}% Line"
+        returns_1st_trajectory = Counter([shot.path.trajectory for shot in self.returns_1st_serve])
+        returns_1st = sum(returns_1st_trajectory.values())
+        self.stats.append(Stat("1st Serve Returns Angle", [placement], returns_1st,
+                               format_returns.format(self.pct(returns_1st_trajectory[Constants.ShortAngle], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Crosscourt], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Center], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Line], returns_1st))))
+
+        returns_1st_trajectory = Counter([shot.path.trajectory for shot in self.returns_1st_in_play])
+        returns_1st = sum(returns_1st_trajectory.values())
+        self.stats.append(Stat("1st Serve Returns In-Play Angle", [placement], returns_1st,
+                               format_returns.format(self.pct(returns_1st_trajectory[Constants.ShortAngle], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Crosscourt], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Center], returns_1st),
+                                                     self.pct(returns_1st_trajectory[Constants.Line], returns_1st))))
+
+        returns_2nd_trajectory = Counter([shot.path.trajectory for shot in self.returns_2nd_serve])
+        returns_2nd = sum(returns_2nd_trajectory.values())
+        self.stats.append(Stat("2nd Serve Returns Angle", [placement], returns_2nd,
+                               format_returns.format(self.pct(returns_2nd_trajectory[Constants.ShortAngle], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Crosscourt], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Center], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Line], returns_2nd))))
+
+        returns_2nd_trajectory = Counter([shot.path.trajectory for shot in self.returns_2nd_in_play])
+        returns_2nd = sum(returns_2nd_trajectory.values())
+        self.stats.append(Stat("2nd Serve Returns In-Play Angle", [placement], returns_2nd,
+                               format_returns.format(self.pct(returns_2nd_trajectory[Constants.ShortAngle], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Crosscourt], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Center], returns_2nd),
+                                                     self.pct(returns_2nd_trajectory[Constants.Line], returns_2nd))))
+
+        format_returns = "{0} ({1}%) Short, {2} ({3}%) Deep, ({4} Total)"
+        self.points_won_1st_returned_deep = [point for point in self.points_won_receiving for shot in point.shots
+                                             if shot.stroke == Constants.Return
+                                             and shot.stroke_type == Constants.FirstReturn
+                                             and shot.path.mark.location in Constants.Deep]
+        self.points_won_1st_returned_short = [point for point in self.points_won_receiving for shot in point.shots
+                                              if shot.stroke == Constants.Return
+                                              and shot.stroke_type == Constants.FirstReturn
+                                              and shot.path.mark.location in Constants.Short]
+        self.points_won_1st_return = self.points_won_1st_returned_deep + self.points_won_1st_returned_short
+        self.stats.append(Stat("Points Won When 1st Return", [placement], len(self.points_won_1st_return),
+                               format_returns.format(len(self.points_won_1st_returned_short),
+                                                     self.pct(self.points_won_1st_returned_short, self.points_won_1st_return),
+                                                     len(self.points_won_1st_returned_deep),
+                                                     self.pct(self.points_won_1st_returned_deep, self.points_won_1st_return),
+                                                     len(self.points_won_1st_return))))
+
+        self.points_won_2nd_returned_deep = [point for point in self.points_won_receiving for shot in point.shots
+                                             if shot.stroke == Constants.Return
+                                             and shot.stroke_type == Constants.SecondReturn
+                                             and shot.path.mark.location in Constants.Deep]
+        self.points_won_2nd_returned_short = [point for point in self.points_won_receiving for shot in point.shots
+                                              if shot.stroke == Constants.Return
+                                              and shot.stroke_type == Constants.SecondReturn
+                                              and shot.path.mark.location in Constants.Short]
+        self.points_won_2nd_return = self.points_won_2nd_returned_deep + self.points_won_2nd_returned_short
+        self.stats.append(Stat("Points Won When 2nd Return", [placement], len(self.points_won_2nd_return),
+                               format_returns.format(len(self.points_won_2nd_returned_short),
+                                                     self.pct(self.points_won_2nd_returned_short, self.points_won_2nd_return),
+                                                     len(self.points_won_2nd_returned_deep),
+                                                     self.pct(self.points_won_2nd_returned_deep, self.points_won_2nd_return),
+                                                     len(self.points_won_2nd_return))))
 
         total_winners = len(self.winning_shots)
         format_pct = "{0:3}% ({1} of {2})"
         points_won_at_net = [shot for shot in self.winning_shots if shot.path.impact.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
-        winners_at_net_pct = (0 if not total_winners else round(len(points_won_at_net) * 100 / total_winners))
+        winners_at_net_pct = self.pct(points_won_at_net, self.winning_shots)
         self.stats.append(Stat("% Winners at Net", [placement], winners_at_net_pct,
                                format_pct.format(winners_at_net_pct, len(points_won_at_net), total_winners)))
         points_won_in_nomans = [shot for shot in self.winning_shots if shot.path.impact.location in ["No Man's", "Service Line"]]
-        winners_from_nomans_pct = (0 if not total_winners else round(len(points_won_in_nomans) * 100 / total_winners))
+        winners_from_nomans_pct = self.pct(points_won_in_nomans, self.winning_shots)
         self.stats.append(Stat("% Winners from No Man's", [placement], winners_from_nomans_pct,
                                format_pct.format(winners_from_nomans_pct, len(points_won_in_nomans), total_winners)))
         points_won_baseline = [shot for shot in self.winning_shots if shot.path.impact.location in ["Baseline", "Out"]]
-        winners_from_baseline_pct = (0 if not total_winners else round(len(points_won_baseline) * 100 / total_winners))
+        winners_from_baseline_pct = self.pct(points_won_baseline, self.winning_shots)
         self.stats.append(Stat("% Winners from Baseline", [placement], winners_from_baseline_pct,
                                format_pct.format(winners_from_baseline_pct, len(points_won_baseline), total_winners)))
 
         total_forced_errors = len(self.forced_errors)
-        forced_errors_at_net = [shot for shot in self.forced_errors if shot.path.mark.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
-        forced_errors_net_pct = (0 if not total_forced_errors else round(len(forced_errors_at_net) * 100 / total_forced_errors))
+        forced_errors_at_net = [shot for shot in self.forced_errors if shot.path.mark.location in Constants.AtNet]
+        forced_errors_net_pct = self.pct(forced_errors_at_net, self.forced_errors)
         self.stats.append(Stat("% Forced Errors at Net", [placement], forced_errors_net_pct,
                                format_pct.format(forced_errors_net_pct, len(forced_errors_at_net), total_forced_errors)))
         forced_errors_in_nomans = [shot for shot in self.forced_errors if shot.path.mark.location in ["No Man's", "Service Line"]]
-        forced_errors_nomans_pct = (0 if not total_forced_errors else round(len(forced_errors_in_nomans) * 100 / total_forced_errors))
+        forced_errors_nomans_pct = self.pct(forced_errors_in_nomans, self.forced_errors)
         self.stats.append(Stat("% Forced Errors from No Man's", [placement], forced_errors_nomans_pct,
                                format_pct.format(forced_errors_nomans_pct, len(forced_errors_in_nomans), total_forced_errors)))
         forced_errors_baseline = [shot for shot in self.forced_errors if shot.path.mark.location in ["Baseline", "Out"]]
-        forced_errors_baseline_pct = (0 if not total_forced_errors else round(len(forced_errors_baseline) * 100 / total_forced_errors))
+        forced_errors_baseline_pct = self.pct(forced_errors_baseline, self.forced_errors)
         self.stats.append(Stat("% Forced Errors from Baseline", [placement], forced_errors_baseline_pct,
                                format_pct.format(forced_errors_baseline_pct, len(forced_errors_baseline), total_forced_errors)))
 
         total_unforced_errors = len(self.unforced_errors)
         unforced_errors_at_net = [shot for shot in self.unforced_errors if shot.path.impact.location in ["Volley Zone", "Left Service Box", "Right Service Box"]]
-        unforced_errors_net_pct = (0 if not total_unforced_errors else round(len(unforced_errors_at_net) * 100 / total_unforced_errors))
+        unforced_errors_net_pct = self.pct(unforced_errors_at_net, self.unforced_errors)
         self.stats.append(Stat("% Unforced Errors at Net", [placement], unforced_errors_net_pct,
                                format_pct.format(unforced_errors_net_pct, len(unforced_errors_at_net), total_unforced_errors)))
         unforced_errors_in_nomans = [shot for shot in self.unforced_errors if shot.path.impact.location in ["No Man's", "Service Line"]]
-        unforced_errors_nomans_pct = (0 if not total_unforced_errors else round(len(unforced_errors_in_nomans) * 100 / total_unforced_errors))
+        unforced_errors_nomans_pct = self.pct(unforced_errors_in_nomans, self.unforced_errors)
         self.stats.append(Stat("% Unforced Errors from No Man's", [placement], unforced_errors_nomans_pct,
                                format_pct.format(unforced_errors_nomans_pct, len(unforced_errors_in_nomans), total_unforced_errors)))
         unforced_errors_baseline = [shot for shot in self.unforced_errors if shot.path.impact.location in ["Baseline", "Out"]]
-        unforced_errors_baseline_pct = (0 if not total_unforced_errors else round(len(unforced_errors_baseline) * 100 / total_unforced_errors))
+        unforced_errors_baseline_pct = self.pct(unforced_errors_baseline, self.unforced_errors)
         self.stats.append(Stat("% Unforced Errors from Baseline", [placement], unforced_errors_baseline_pct,
                                format_pct.format(unforced_errors_baseline_pct, len(unforced_errors_baseline), total_unforced_errors)))
 
